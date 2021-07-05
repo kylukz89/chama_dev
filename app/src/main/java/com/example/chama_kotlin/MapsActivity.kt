@@ -5,12 +5,13 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.location.Address
+import android.location.Geocoder
 import android.location.Location
 import android.location.LocationManager
 import android.os.Bundle
 import android.os.Looper
 import android.provider.Settings
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import com.google.android.gms.location.*
@@ -20,17 +21,29 @@ import com.google.android.gms.maps.OnMapReadyCallback
 import com.google.android.gms.maps.SupportMapFragment
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MarkerOptions
+import java.util.*
 import kotlin.concurrent.thread
 
-
+/**
+ * App desenvolvido como defasio/teste para ingresso
+ * na empresa CHAMA cadastrada no site da REVELO
+ *
+ * OBS: Apenas experimental e primeiro contato com KOTLIN NATIVO
+ *
+ * LINK: https://developers.google.com/maps/documentation/android-sdk/current-place-tutorial?hl=pt-br
+ *
+ * @author      Igor Maximo
+ * @date        01/07/2021
+ */
 class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
 
     private lateinit var mMap: GoogleMap
 
-
+    // Localização atual
+    private var latitudeAtual: Double? = 0.0
+    private var longitudeAtual: Double? = 0.0
     val PERMISSION_ID = 42
     lateinit var mFusedLocationClient: FusedLocationProviderClient
-
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -39,50 +52,80 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         val mapFragment = supportFragmentManager
             .findFragmentById(R.id.map) as SupportMapFragment
         mapFragment.getMapAsync(this)
-
+        // Inicia a variável fusedLocation para rodar o serviço de geo
         mFusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
-
-
-        val permissions_code = 42
         val permissions = arrayOf(
-            Manifest.permission.CAMERA,
             Manifest.permission.ACCESS_COARSE_LOCATION,
             Manifest.permission.ACCESS_FINE_LOCATION
         )
-        ActivityCompat.requestPermissions(this, permissions, permissions_code)
+        ActivityCompat.requestPermissions(this, permissions, PERMISSION_ID)
         // Thread separada para não atrapalhar a abertura completa da main activity
         thread {
             var i = 0
-            // Aguarda um pouco antes de transitar a tela
-            while (true) {
+            // Enquanto não conseguir a atualização da localização atual, fica tentando...
+            while (latitudeAtual == 0.0) {
                 Thread.sleep(1000)
                 System.err.println("**============> " + i)
-
+                // Pega localização atual
                 getLastLocation()
-
+                // Conta qts tentativas de pegar localização teve para log...
                 i++
             }
+
+            latitudeAtual?.let { longitudeAtual?.let { it1 -> getCompleteAddressString(it, it1) } }
         }
+
+
+
+
+
+
+
+
+
+
+
+        var places = PlacesMapAPI()
+        places.getRetornarPlacesPorGeolocalizcao("", "")
+
 
     }
 
+
     override fun onMapReady(googleMap: GoogleMap) {
         mMap = googleMap
-        // Add a marker in Sydney and move the camera
         val sydney = latitudeAtual?.let { longitudeAtual?.let { it1 -> LatLng(it, it1) } }
         mMap.addMarker(MarkerOptions().position(sydney).title("Marker in Sydney"))
         mMap.moveCamera(CameraUpdateFactory.newLatLng(sydney))
     }
 
-    private var latitudeAtual : Double? = 0.0
-    private var longitudeAtual : Double? = 0.0
 
+    private fun getCompleteAddressString(LATITUDE: Double, LONGITUDE: Double): String? {
+        var strAdd = ""
+        val geocoder = Geocoder(this, Locale.getDefault())
+        try {
+            val addresses: List<Address>? = geocoder.getFromLocation(LATITUDE, LONGITUDE, 1)
+            if (addresses != null) {
+                val returnedAddress: Address = addresses[0]
+                val strReturnedAddress = StringBuilder("")
+                for (i in 0..returnedAddress.getMaxAddressLineIndex()) {
+                    strReturnedAddress.append(returnedAddress.getAddressLine(i)).append("\n")
+                }
+                strAdd = strReturnedAddress.toString()
+            } else {
+//                Log.w("My Current loction address", "No Address returned!")
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+//            Log.w("My Current loction address", "Canont get Address!")
+        }
+        return strAdd
+    }
 
     @SuppressLint("MissingPermission")
     private fun getLastLocation() {
         if (checkPermissions()) {
             if (isLocationEnabled()) {
-
                 mFusedLocationClient.lastLocation.addOnCompleteListener(this) { task ->
                     var location: Location? = task.result
                     if (location == null) {
@@ -90,18 +133,24 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
                     } else {
                         latitudeAtual = location.latitude.toString().toDouble()
                         longitudeAtual = location.longitude.toDouble()
-
-
-                        val sydney = latitudeAtual?.let { longitudeAtual?.let { it1 -> LatLng(it, it1) } }
-                        mMap.addMarker(MarkerOptions().position(sydney).title("Marker in Sydney"))
-                        mMap.moveCamera(CameraUpdateFactory.newLatLng(sydney))
-
+                        val voceAqui = latitudeAtual?.let {
+                            longitudeAtual?.let { it1 ->
+                                LatLng(
+                                    it,
+                                    it1
+                                )
+                            }
+                        }
+                        mMap.addMarker(MarkerOptions().position(voceAqui).title("Você aqui!"))
+                        mMap.moveCamera(CameraUpdateFactory.newLatLng(voceAqui))
                         System.err.println("**============> " + location.latitude.toString())
                         System.err.println("**============> " + location.longitude.toString())
+                        val you = LatLng(location.latitude, location.longitude)
+                        mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(you, 17f))
                     }
                 }
             } else {
-                Toast.makeText(this, "Turn on location", Toast.LENGTH_LONG).show()
+                // Solicita que seja ligado o GPS
                 val intent = Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
                 startActivity(intent)
             }
@@ -109,6 +158,8 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
             requestPermissions()
         }
     }
+
+    // -20.9051498,-51.3511061
 
     @SuppressLint("MissingPermission")
     private fun requestNewLocationData() {
@@ -125,15 +176,12 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         )
     }
 
+
     private val mLocationCallback = object : LocationCallback() {
         override fun onLocationResult(locationResult: LocationResult) {
             var mLastLocation: Location = locationResult.lastLocation
-//            findViewById<TextView>(R.id.latTextView).text = mLastLocation.latitude.toString()
-//            findViewById<TextView>(R.id.lonTextView).text = mLastLocation.longitude.toString()
-
             System.err.println("**============> " + mLastLocation.latitude.toString())
             System.err.println("**============> " + mLastLocation.longitude.toString())
-
         }
     }
 
