@@ -5,24 +5,33 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.location.Address
 import android.location.Geocoder
 import android.location.Location
 import android.location.LocationManager
+import android.os.Build
 import android.os.Bundle
 import android.os.Looper
 import android.provider.Settings
+import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import com.google.android.gms.location.*
-import com.google.android.gms.maps.CameraUpdateFactory
-import com.google.android.gms.maps.GoogleMap
-import com.google.android.gms.maps.OnMapReadyCallback
-import com.google.android.gms.maps.SupportMapFragment
+import com.google.android.gms.maps.*
+import com.google.android.gms.maps.model.BitmapDescriptor
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MarkerOptions
+import org.json.JSONObject
+import java.io.IOException
+import java.io.InputStream
+import java.net.HttpURLConnection
+import java.net.URL
 import java.util.*
+import kotlin.collections.ArrayList
 import kotlin.concurrent.thread
+
 
 /**
  * App desenvolvido como defasio/teste para ingresso
@@ -45,6 +54,7 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
     val PERMISSION_ID = 42
     lateinit var mFusedLocationClient: FusedLocationProviderClient
 
+    @RequiresApi(Build.VERSION_CODES.N)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_maps)
@@ -63,7 +73,7 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         thread {
             var i = 0
             // Enquanto não conseguir a atualização da localização atual, fica tentando...
-            while (latitudeAtual == 0.0) {
+            while (latitudeAtual == 0.0 && i < 3) {
                 Thread.sleep(1000)
                 System.err.println("**============> " + i)
                 // Pega localização atual
@@ -76,52 +86,86 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         }
 
 
+        // Coleta os pontos referente empresas de gás/água
+        thread {
+            getVendaGasProximos("gas")
+        }
+    }
 
 
-
-
-
-
-
+    fun getVendaGasProximos(gas: String) {
+        var listaPontoNome = ArrayList<String>()
+        var listaPontoEndereco = ArrayList<String>()
+        var listaPontoGeoLat = ArrayList<String>()
+        var listaPontoGeoLng = ArrayList<String>()
+        var listaPontoIcone = ArrayList<String>()
 
 
         var places = PlacesMapAPI()
-        places.getRetornarPlacesPorGeolocalizcao("", "")
+        var response = places.sendPostRequest(gas)
+
+        val json = response.toString()
+        val obj = JSONObject(json)
+        val getArray = obj.getJSONArray("results")
 
 
-    }
-
-
-    override fun onMapReady(googleMap: GoogleMap) {
-        mMap = googleMap
-        val sydney = latitudeAtual?.let { longitudeAtual?.let { it1 -> LatLng(it, it1) } }
-        mMap.addMarker(MarkerOptions().position(sydney).title("Marker in Sydney"))
-        mMap.moveCamera(CameraUpdateFactory.newLatLng(sydney))
-    }
-
-
-    private fun getCompleteAddressString(LATITUDE: Double, LONGITUDE: Double): String? {
-        var strAdd = ""
-        val geocoder = Geocoder(this, Locale.getDefault())
-        try {
-            val addresses: List<Address>? = geocoder.getFromLocation(LATITUDE, LONGITUDE, 1)
-            if (addresses != null) {
-                val returnedAddress: Address = addresses[0]
-                val strReturnedAddress = StringBuilder("")
-                for (i in 0..returnedAddress.getMaxAddressLineIndex()) {
-                    strReturnedAddress.append(returnedAddress.getAddressLine(i)).append("\n")
-                }
-                strAdd = strReturnedAddress.toString()
-            } else {
-//                Log.w("My Current loction address", "No Address returned!")
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-//            Log.w("My Current loction address", "Canont get Address!")
+        for (i in 0 until getArray.length()) {
+            val objects: JSONObject
+            objects = getArray.getJSONObject(i)
+            // Nome do ponto
+            val pontoNome = objects["name"].toString()
+            // Endereço do ponto
+            val pontoEndereco = objects["formatted_address"].toString()
+            // Geo do ponto
+            val getArrayGeo = JSONObject(objects["geometry"].toString()).getString("location")
+            val json1 = getArrayGeo.toString()
+            val obj1 = JSONObject(json1)
+            val lat = obj1.getString("lat")
+            val lng = obj1.getString("lng")
+            // Ícone do ponto
+            val pontoIcone = objects["icon"].toString()
+            listaPontoNome.add(i, pontoNome)
+            listaPontoEndereco.add(i, pontoEndereco)
+            listaPontoGeoLat.add(i, lat)
+            listaPontoGeoLng.add(i, lng)
+            listaPontoIcone.add(i, pontoIcone)
         }
-        return strAdd
+
+        println(listaPontoNome.get(2).toString()+"=========1> " + listaPontoNome.size)
+        for (i in 0 until listaPontoGeoLat.size) {
+            val latLng = LatLng(
+                listaPontoGeoLat.get(i).toString().toDouble(),
+                listaPontoGeoLng.get(i).toDouble()
+            )
+
+            runOnUiThread {
+                MapsInitializer.initialize(this)
+                mMap.addMarker(
+                    MarkerOptions().position(latLng).title(listaPontoNome.get(i).toString())
+//                        .icon(getBitmapFromURL(listaPontoIcone.get(i)))
+                )
+            }
+        }
+        println("=========2> " + listaPontoNome.size)
+
+
     }
 
+/*
+    fun getBitmapFromURL(src: String?): BitmapDescriptor? {
+        return try {
+            val url = URL(src)
+            val connection: HttpURLConnection = url.openConnection() as HttpURLConnection
+            connection.setDoInput(true)
+            connection.connect()
+            val input: InputStream = connection.getInputStream()
+            BitmapFactory.decodeStream(input)
+        } catch (e: IOException) {
+            // Log exception
+            null
+        }
+    }
+*/
     @SuppressLint("MissingPermission")
     private fun getLastLocation() {
         if (checkPermissions()) {
@@ -159,7 +203,35 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         }
     }
 
-    // -20.9051498,-51.3511061
+
+    override fun onMapReady(googleMap: GoogleMap) {
+        mMap = googleMap
+//        val eu = latitudeAtual?.let { longitudeAtual?.let { it1 -> LatLng(it, it1) } }
+//        mMap.addMarker(MarkerOptions().position(eu).title("Marker in Sydney"))
+//        mMap.moveCamera(CameraUpdateFactory.newLatLng(eu))
+    }
+
+    private fun getCompleteAddressString(LATITUDE: Double, LONGITUDE: Double): String? {
+        var strAdd = ""
+        val geocoder = Geocoder(this, Locale.getDefault())
+        try {
+            val addresses: List<Address>? = geocoder.getFromLocation(LATITUDE, LONGITUDE, 1)
+            if (addresses != null) {
+                val returnedAddress: Address = addresses[0]
+                val strReturnedAddress = StringBuilder("")
+                for (i in 0..returnedAddress.getMaxAddressLineIndex()) {
+                    strReturnedAddress.append(returnedAddress.getAddressLine(i)).append("\n")
+                }
+                strAdd = strReturnedAddress.toString()
+            } else {
+//                Log.w("My Current loction address", "No Address returned!")
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+//            Log.w("My Current loction address", "Canont get Address!")
+        }
+        return strAdd
+    }
 
     @SuppressLint("MissingPermission")
     private fun requestNewLocationData() {
