@@ -5,8 +5,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
+import android.graphics.Color
 import android.location.Address
 import android.location.Geocoder
 import android.location.Location
@@ -21,13 +20,10 @@ import androidx.core.app.ActivityCompat
 import com.google.android.gms.location.*
 import com.google.android.gms.maps.*
 import com.google.android.gms.maps.model.BitmapDescriptor
+import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MarkerOptions
 import org.json.JSONObject
-import java.io.IOException
-import java.io.InputStream
-import java.net.HttpURLConnection
-import java.net.URL
 import java.util.*
 import kotlin.collections.ArrayList
 import kotlin.concurrent.thread
@@ -44,6 +40,7 @@ import kotlin.concurrent.thread
  * @author      Igor Maximo
  * @date        01/07/2021
  */
+@Suppress("NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
 class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
 
     private lateinit var mMap: GoogleMap
@@ -75,7 +72,6 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
             // Enquanto não conseguir a atualização da localização atual, fica tentando...
             while (latitudeAtual == 0.0 && i < 3) {
                 Thread.sleep(1000)
-                System.err.println("**============> " + i)
                 // Pega localização atual
                 getLastLocation()
                 // Conta qts tentativas de pegar localização teve para log...
@@ -85,14 +81,22 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
             latitudeAtual?.let { longitudeAtual?.let { it1 -> getCompleteAddressString(it, it1) } }
         }
 
-
-        // Coleta os pontos referente empresas de gás/água
+        // Coleta os pontos referente empresas de distribução de gás
+        // Constante gas travada, apenas para ilustrar nosso contexto proposto
         thread {
             getVendaGasProximos("gas")
         }
     }
 
 
+
+    /**
+     * Popula o mapa com os pontos de revenda de gás
+     * próximos a localização do usuário
+     *
+     * @author      Igor Maximo
+     * @date        07/07/2021
+     */
     fun getVendaGasProximos(gas: String) {
         var listaPontoNome = ArrayList<String>()
         var listaPontoEndereco = ArrayList<String>()
@@ -131,7 +135,6 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
             listaPontoIcone.add(i, pontoIcone)
         }
 
-        println(listaPontoNome.get(2).toString()+"=========1> " + listaPontoNome.size)
         for (i in 0 until listaPontoGeoLat.size) {
             val latLng = LatLng(
                 listaPontoGeoLat.get(i).toString().toDouble(),
@@ -140,32 +143,32 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
 
             runOnUiThread {
                 MapsInitializer.initialize(this)
+                val icon = BitmapDescriptorFactory.fromResource(R.drawable.botijao_marker)
                 mMap.addMarker(
-                    MarkerOptions().position(latLng).title(listaPontoNome.get(i).toString())
-//                        .icon(getBitmapFromURL(listaPontoIcone.get(i)))
+                    MarkerOptions().icon(icon).position(latLng).title(listaPontoNome.get(i).toString())
                 )
             }
         }
-        println("=========2> " + listaPontoNome.size)
-
-
     }
 
-/*
-    fun getBitmapFromURL(src: String?): BitmapDescriptor? {
-        return try {
-            val url = URL(src)
-            val connection: HttpURLConnection = url.openConnection() as HttpURLConnection
-            connection.setDoInput(true)
-            connection.connect()
-            val input: InputStream = connection.getInputStream()
-            BitmapFactory.decodeStream(input)
-        } catch (e: IOException) {
-            // Log exception
-            null
-        }
+    /**
+     * Altera a cor do ponto no mapa
+     *
+     * @author      Igor Maximo
+     * @date        07/07/2021
+     */
+    fun getMarkerIcon(color: String?): BitmapDescriptor? {
+        val hsv = FloatArray(3)
+        Color.colorToHSV(Color.parseColor(color), hsv)
+        return BitmapDescriptorFactory.defaultMarker(hsv[0])
     }
-*/
+
+    /**
+     * Retorna a geolocalização atual do usuário
+     *
+     * @author      Igor Maximo
+     * @date        07/07/2021
+     */
     @SuppressLint("MissingPermission")
     private fun getLastLocation() {
         if (checkPermissions()) {
@@ -185,12 +188,10 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
                                 )
                             }
                         }
-                        mMap.addMarker(MarkerOptions().position(voceAqui).title("Você aqui!"))
+                        mMap.addMarker(MarkerOptions().icon(getMarkerIcon("#FF0000")).position(voceAqui).title("Você aqui!"))
                         mMap.moveCamera(CameraUpdateFactory.newLatLng(voceAqui))
-                        System.err.println("**============> " + location.latitude.toString())
-                        System.err.println("**============> " + location.longitude.toString())
                         val you = LatLng(location.latitude, location.longitude)
-                        mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(you, 17f))
+                        mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(you, 15f))
                     }
                 }
             } else {
@@ -206,11 +207,15 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
 
     override fun onMapReady(googleMap: GoogleMap) {
         mMap = googleMap
-//        val eu = latitudeAtual?.let { longitudeAtual?.let { it1 -> LatLng(it, it1) } }
-//        mMap.addMarker(MarkerOptions().position(eu).title("Marker in Sydney"))
-//        mMap.moveCamera(CameraUpdateFactory.newLatLng(eu))
     }
 
+
+    /**
+     * Retorna dados do endereço atual da geolocalização do usuário
+     *
+     * @author      Igor Maximo
+     * @date        07/07/2021
+     */
     private fun getCompleteAddressString(LATITUDE: Double, LONGITUDE: Double): String? {
         var strAdd = ""
         val geocoder = Geocoder(this, Locale.getDefault())
@@ -233,6 +238,13 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         return strAdd
     }
 
+
+    /**
+     * Atualiza a geolocalização do usuário
+     *
+     * @author      Igor Maximo
+     * @date        07/07/2021
+     */
     @SuppressLint("MissingPermission")
     private fun requestNewLocationData() {
         var mLocationRequest = LocationRequest()
@@ -265,6 +277,12 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         )
     }
 
+    /**
+     * Valida se existe permissão de GPS do usuário
+     *
+     * @author      Igor Maximo
+     * @date        07/07/2021
+     */
     private fun checkPermissions(): Boolean {
         if (ActivityCompat.checkSelfPermission(
                 this,
@@ -280,6 +298,12 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         return false
     }
 
+    /**
+     * Caso o usuário não tenha dado permissão, solicita...
+     *
+     * @author      Igor Maximo
+     * @date        07/07/2021
+     */
     private fun requestPermissions() {
         ActivityCompat.requestPermissions(
             this,

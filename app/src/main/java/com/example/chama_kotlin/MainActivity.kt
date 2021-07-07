@@ -1,16 +1,7 @@
 package com.example.chama_kotlin
 
-import android.accessibilityservice.GestureDescription
 import android.content.Intent
-import android.graphics.Color
 import android.os.Bundle
-import android.view.Gravity
-import android.view.ViewGroup
-import android.view.WindowManager
-import android.widget.LinearLayout
-import android.widget.ProgressBar
-import android.widget.TextView
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import kotlin.concurrent.thread
 
@@ -42,13 +33,4 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, MapsActivity::class.java))
         }
     }
-
-
-    /**
-     * AsyncTask com loader para transição de tela
-     *
-     * @author      Igor Maximo
-     * @date        01/07/2021
-     */
-
 }
